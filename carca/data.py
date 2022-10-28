@@ -12,7 +12,7 @@ def load_ctx(dataset_name) -> Dict[Tuple[int, int], np.ndarray]:
 
     # Cast context values from list to numpy array
     for k in ctx.keys():
-        ctx[k] = np.array(ctx[k])
+        ctx[k] = np.array(ctx[k], dtype=np.float32)
 
     return ctx
 
@@ -22,7 +22,8 @@ def load_attrs(dataset_name) -> np.ndarray:
         attrs = pickle.load(rf)
 
     # Add zero row for <pad> item
-    attrs = np.concatenate((np.zeros((1, attrs.shape[1])), attrs), axis=0)
+    pad_row = np.zeros((1, attrs.shape[1]), dtype=np.float32)
+    attrs = np.concatenate((pad_row, attrs.astype(np.float32)), axis=0)
     return attrs
 
 
@@ -103,8 +104,8 @@ def get_train_sequences(
 
     p_x = np.zeros(seq_len, dtype=np.int32)
     o_x = np.zeros(seq_len * 2, dtype=np.int32)
-    p_q = np.zeros((seq_len, q_len))
-    o_q = np.zeros((seq_len * 2, q_len))
+    p_q = np.zeros((seq_len, q_len), dtype=np.float32)
+    o_q = np.zeros((seq_len * 2, q_len), dtype=np.float32)
 
     padded_idxs = pad_profile(profile, seq_len, "train")
     neg_sample = sample_negatives(profile, attrs.shape[0], len(padded_idxs))
@@ -125,9 +126,8 @@ def get_train_sequences(
         o_q[shift + i] = np.concatenate((a, c))
 
         a = attrs[neg_sample[i]]
-        c = ctx[
-            ((user_id, profile[pi + 1]))
-        ]  # Assign same context to negative sample as to positive sample
+        # Assign same context to negative sample as to positive sample
+        c = ctx[((user_id, profile[pi + 1]))]
         o_q[seq_len + shift + i] = np.concatenate((a, c))
 
     y_true = np.zeros(seq_len * 2, dtype=np.int32)
@@ -135,7 +135,7 @@ def get_train_sequences(
     mask = np.zeros(seq_len * 2, dtype=np.int32)
     mask[np.where(o_x > 0)] = 1
 
-    return p_x, o_x, p_q, o_q, y_true, mask
+    return p_x, p_q, o_x, o_q, y_true, mask
 
 
 def get_test_sequences(
@@ -151,8 +151,8 @@ def get_test_sequences(
 
     p_x = np.zeros(profile_seq_len, dtype=np.int32)
     o_x = np.zeros(target_seq_len + 1, dtype=np.int32)
-    p_q = np.zeros((profile_seq_len, q_len))
-    o_q = np.zeros((target_seq_len + 1, q_len))
+    p_q = np.zeros((profile_seq_len, q_len), dtype=np.float32)
+    o_q = np.zeros((target_seq_len + 1, q_len), dtype=np.float32)
 
     one_out = one_out_idx(profile, mode)
     a = attrs[profile[one_out]]
@@ -173,9 +173,8 @@ def get_test_sequences(
 
     for i, oi in enumerate(neg_samples, start=1):
         a = attrs[oi]
-        c = ctx[
-            (user_id, profile[one_out])
-        ]  # Assign same context to negatives as to one-out positive
+        # Assign same context to negatives as to one-out positive
+        c = ctx[(user_id, profile[one_out])]
         o_x[i] = oi
         o_q[i] = np.concatenate((a, c))
 
@@ -183,7 +182,7 @@ def get_test_sequences(
     y_true[0] = 1
     mask = np.ones(target_seq_len + 1, dtype=np.int32)
 
-    return p_x, o_x, p_q, o_q, y_true, mask
+    return p_x, p_q, o_x, o_q, y_true, mask
 
 
 def get_sequences(

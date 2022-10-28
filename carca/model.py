@@ -19,8 +19,10 @@ class Embeddings(nn.Module):
 
 # Profile-level self-attention block
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, d: int, H: int, p: float):
+    def __init__(self, d: int, H: int, p: float, residual: bool):
         super().__init__()
+
+        self.residual = residual
 
         # Attention
         self.norm1 = nn.LayerNorm(normalized_shape=d)
@@ -43,7 +45,9 @@ class SelfAttentionBlock(nn.Module):
         s, _ = self.attention(q, x, x, need_weights=False)
         s = self.dropout1(s)
 
-        s = torch.mul(s, x)  # Multiplicative residual connection
+        if self.residual:
+            s = torch.mul(s, x)  # Multiplicative residual connection
+
         s = self.norm2(s)
         f = s.permute(0, 2, 1)  # Change dim order to get channel dim to middle (for Conv1d)
 
@@ -53,18 +57,21 @@ class SelfAttentionBlock(nn.Module):
 
         f = self.ffn_2(f)
         f = self.dropout3(f)
-
         f = f.permute(0, 2, 1)  # Change dim order back
-        f = torch.mul(f, s)  # Multiplicative residual connection
-        f = self.norm3(f)
 
+        if self.residual:
+            f = torch.mul(f, s)  # Multiplicative residual connection
+
+        f = self.norm3(f)
         return f
 
 
 # Target-level cross-attention block
 class CrossAttentionBlock(nn.Module):
-    def __init__(self, d: int, H: int, p: float):
+    def __init__(self, d: int, H: int, p: float, residual: bool):
         super().__init__()
+
+        self.residual = residual
 
         # Attention
         self.attention = nn.MultiheadAttention(embed_dim=d, num_heads=H, batch_first=True)
@@ -78,7 +85,9 @@ class CrossAttentionBlock(nn.Module):
         s, _ = self.attention(e, f, f, need_weights=False)
         s = self.dropout(s)
 
-        s = torch.mul(s, e)  # Multiplicative residual connection
+        if self.residual:
+            s = torch.mul(s, e)  # Multiplicative residual connection
+
         s = s.permute(0, 2, 1)  # Change dim order to get channel dim to middle (for Conv1d)
 
         y = self.ffn(s)
@@ -90,13 +99,23 @@ class CrossAttentionBlock(nn.Module):
 
 class CARCA(nn.Module):
     def __init__(
-        self, n_items: int, d: int, g: int, n_ctx: int, n_attrs: int, H: int, p: float, B: int
+        self,
+        n_items: int,
+        d: int,
+        g: int,
+        n_ctx: int,
+        n_attrs: int,
+        H: int,
+        p: float,
+        B: int,
+        res_sa: bool,
+        res_ca: bool,
     ):
         super().__init__()
 
         self.embeds = Embeddings(n_items, d, g, n_ctx, n_attrs)
-        self.sa_blocks = nn.Sequential(*[SelfAttentionBlock(d, H, p) for _ in range(B)])
-        self.ca_blocks = CrossAttentionBlock(d, H, p)
+        self.sa_blocks = nn.Sequential(*[SelfAttentionBlock(d, H, p, res_sa) for _ in range(B)])
+        self.ca_blocks = CrossAttentionBlock(d, H, p, res_ca)
 
     def forward(self, p_x, p_q, o_x, o_q):
         p_e = self.embeds(p_x, p_q)
@@ -112,7 +131,7 @@ class BinaryCrossEntropy(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, y_true, y_pred, mask):
+    def forward(self, y_pred, y_true, mask):
         loss = -(y_true * torch.log(y_pred) + (1.0 - y_true) * torch.log(1.0 - y_pred))
-        loss = torch.sum(loss * mask)
+        loss = torch.sum(loss * mask) / torch.sum(y_true)
         return loss
