@@ -3,7 +3,7 @@ import pickle
 import random
 from typing import List, Dict, Tuple
 from collections import defaultdict
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 def load_ctx(dataset_name) -> Dict[Tuple[int, int], np.ndarray]:
@@ -31,7 +31,7 @@ def load_profiles(dataset_name):
     user_ids, item_ids = set(), set()
     profiles = defaultdict(list)
 
-    with open(f"../data/{dataset_name}.txt", "r") as df:
+    with open(f"../data/{dataset_name}_sorted.txt", "r") as df:
         for line in df:
             user_id, item_id = list(map(int, line.strip().split(" ")))
             user_ids.add(user_id)
@@ -127,7 +127,7 @@ def get_train_sequences(
 
         a = attrs[neg_sample[i]]
         # Assign same context to negative sample as to positive sample
-        c = ctx[((user_id, profile[pi + 1]))]
+        c = ctx[(user_id, profile[pi + 1])]
         o_q[seq_len + shift + i] = np.concatenate((a, c))
 
     y_true = np.zeros(seq_len * 2, dtype=np.int32)
