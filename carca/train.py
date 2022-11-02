@@ -74,7 +74,7 @@ def train(
 
             if verbose == 2:
                 time = datetime.now().strftime("%H:%M:%S")
-                print(f"{time} - Batch {i:03d}: Average Loss = {(sum_loss / i):.4f}")
+                print(f"{time} - Batch {i:03d}: Avg Loss = {(sum_loss / i):.4f}")
 
         if verbose in [1, 2]:
             time = datetime.now().strftime("%H:%M:%S")
@@ -84,7 +84,7 @@ def train(
             # Evaluate model
             HR, NDCG = evaluate(model, val_loader, device, top_k)
             time = datetime.now().strftime("%H:%M:%S")
-            print(f"{time} - Evaluation: HR = {HR:.4f}, NDCG = {NDCG:.4f}")
+            print(f"{time} - Epoch {(epoch):03d}: HR = {HR:.4f}, NDCG = {NDCG:.4f}")
             model = model.train().to(device)
 
     return model
