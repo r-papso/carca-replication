@@ -1,8 +1,9 @@
-import numpy as np
 import pickle
 import random
-from typing import List, Dict, Tuple
 from collections import defaultdict
+from typing import Dict, List, Tuple
+
+import numpy as np
 from torch.utils.data import Dataset
 
 

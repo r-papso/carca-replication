@@ -1,12 +1,13 @@
+from datetime import datetime
 from typing import Tuple
 
 import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
-from .utils import to
+
 from .model import BinaryCrossEntropy
-from datetime import datetime
+from .utils import to
 
 
 def compute_HR(y_pred: torch.Tensor, y_true: torch.Tensor, k: int) -> float:
@@ -80,7 +81,7 @@ def train(
             time = datetime.now().strftime("%H:%M:%S")
             print(f"{time} - Epoch {(epoch):03d}: Avg Loss = {(sum_loss / len(train_loader)):.4f}")
 
-        if val_loader is not None:
+        if val_loader is not None and verbose in [1, 2]:
             # Evaluate model
             HR, NDCG = evaluate(model, val_loader, device, top_k)
             time = datetime.now().strftime("%H:%M:%S")
