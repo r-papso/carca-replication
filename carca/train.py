@@ -6,7 +6,7 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-from .model import BinaryCrossEntropy
+from .model import BinaryCrossEntropy, CARCA
 from .utils import to
 
 
@@ -30,15 +30,15 @@ def compute_NDCG(y_pred: torch.Tensor, y_true: torch.Tensor, k: int) -> float:
     return torch.sum(scores).item()
 
 
-def evaluate(model: nn.Module, loader: DataLoader, device: str, k: int) -> Tuple[float, float]:
+def evaluate(model: CARCA, loader: DataLoader, device: str, k: int) -> Tuple[float, float]:
     model = model.eval().to(device)
     HR, NDCG, total = 0, 0, 0
 
     with torch.no_grad():
         for batch in loader:
-            p_x, p_q, o_x, o_q, y_true, mask = to(*batch, device=device)
+            p_x, p_q, p_mask, o_x, o_q, o_mask, y_true = to(*batch, device=device)
 
-            y_pred = model(p_x, p_q, o_x, o_q)
+            y_pred = model.forward(p_x, p_q, p_mask, o_x, o_q, o_mask)
             HR += compute_HR(y_pred, y_true, k)
             NDCG += compute_NDCG(y_pred, y_true, k)
             total += y_true.shape[0]
@@ -47,7 +47,7 @@ def evaluate(model: nn.Module, loader: DataLoader, device: str, k: int) -> Tuple
 
 
 def train(
-    model: nn.Module,
+    model: CARCA,
     train_loader: DataLoader,
     val_loader: DataLoader,
     device: str,
@@ -55,7 +55,7 @@ def train(
     epochs: int,
     top_k: int = 10,
     verbose: int = 1,
-) -> nn.Module:
+) -> CARCA:
     loss_fn = BinaryCrossEntropy()
     model = model.train().to(device)
 
@@ -63,11 +63,11 @@ def train(
         sum_loss = 0
 
         for i, batch in enumerate(train_loader, start=1):
-            p_x, p_q, o_x, o_q, y_true, mask = to(*batch, device=device)
+            p_x, p_q, p_mask, o_x, o_q, o_mask, y_true = to(*batch, device=device)
 
             optim.zero_grad()
-            y_pred = model(p_x, p_q, o_x, o_q)
-            loss = loss_fn(y_pred, y_true, mask)
+            y_pred = model.forward(p_x, p_q, p_mask, o_x, o_q, o_mask)
+            loss = loss_fn.forward(y_pred, y_true, o_mask)
             loss.backward()
             optim.step()
 

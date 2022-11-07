@@ -6,9 +6,11 @@ from typing import Dict, List, Tuple
 import numpy as np
 from torch.utils.data import Dataset
 
+DATA_PATH = "../../data"
+
 
 def load_ctx(dataset_name) -> Dict[Tuple[int, int], np.ndarray]:
-    with open(f"../data/{dataset_name}_ctx.dat", "rb") as rf:
+    with open(f"{DATA_PATH}/{dataset_name}_ctx.dat", "rb") as rf:
         ctx = pickle.load(rf)
 
     # Cast context values from list to numpy array
@@ -19,7 +21,7 @@ def load_ctx(dataset_name) -> Dict[Tuple[int, int], np.ndarray]:
 
 
 def load_attrs(dataset_name) -> np.ndarray:
-    with open(f"../data/{dataset_name}_attrs.dat", "rb") as rf:
+    with open(f"{DATA_PATH}/{dataset_name}_attrs.dat", "rb") as rf:
         attrs = pickle.load(rf)
 
     # Add zero row for <pad> item
@@ -32,7 +34,7 @@ def load_profiles(dataset_name):
     user_ids, item_ids = set(), set()
     profiles = defaultdict(list)
 
-    with open(f"../data/{dataset_name}_sorted.txt", "r") as df:
+    with open(f"{DATA_PATH}/{dataset_name}_sorted.txt", "r") as df:
         for line in df:
             user_id, item_id = list(map(int, line.strip().split(" ")))
             user_ids.add(user_id)
@@ -133,10 +135,14 @@ def get_train_sequences(
 
     y_true = np.zeros(seq_len * 2, dtype=np.int32)
     y_true[np.where(p_x > 0)] = 1
-    mask = np.zeros(seq_len * 2, dtype=np.int32)
-    mask[np.where(o_x > 0)] = 1
 
-    return p_x, p_q, o_x, o_q, y_true, mask
+    o_mask = np.zeros(seq_len * 2, dtype=np.int32)
+    o_mask[np.where(o_x > 0)] = 1
+
+    p_mask = np.zeros(seq_len, dtype=np.int32)
+    p_mask[np.where(p_x > 0)] = 1
+
+    return p_x, p_q, p_mask, o_x, o_q, o_mask, y_true
 
 
 def get_test_sequences(
@@ -181,9 +187,11 @@ def get_test_sequences(
 
     y_true = np.zeros(target_seq_len + 1, dtype=np.int32)
     y_true[0] = 1
-    mask = np.ones(target_seq_len + 1, dtype=np.int32)
 
-    return p_x, p_q, o_x, o_q, y_true, mask
+    p_mask = np.ones(profile_seq_len, dtype=np.int32)
+    o_mask = np.ones(target_seq_len + 1, dtype=np.int32)
+
+    return p_x, p_q, p_mask, o_x, o_q, o_mask, y_true
 
 
 def get_sequences(
