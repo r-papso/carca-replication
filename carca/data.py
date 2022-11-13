@@ -136,13 +136,7 @@ def get_train_sequences(
     y_true = np.zeros(seq_len * 2, dtype=np.int32)
     y_true[np.where(p_x > 0)] = 1
 
-    o_mask = np.zeros(seq_len * 2, dtype=np.int32)
-    o_mask[np.where(o_x > 0)] = 1
-
-    p_mask = np.zeros(seq_len, dtype=np.int32)
-    p_mask[np.where(p_x > 0)] = 1
-
-    return p_x, p_q, p_mask, o_x, o_q, o_mask, y_true
+    return p_x, p_q, o_x, o_q, y_true
 
 
 def get_test_sequences(
@@ -188,10 +182,7 @@ def get_test_sequences(
     y_true = np.zeros(target_seq_len + 1, dtype=np.int32)
     y_true[0] = 1
 
-    p_mask = np.ones(profile_seq_len, dtype=np.int32)
-    o_mask = np.ones(target_seq_len + 1, dtype=np.int32)
-
-    return p_x, p_q, p_mask, o_x, o_q, o_mask, y_true
+    return p_x, p_q, o_x, o_q, y_true
 
 
 def get_sequences(
