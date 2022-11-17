@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 import torch
 import torch.nn as nn
@@ -16,37 +16,55 @@ class MultiHeadAttention(nn.Module):
         self.d = embed_dim
         self.H = num_heads
 
-        self.WQ = nn.Linear(in_features=embed_dim, out_features=embed_dim, bias=False)
-        self.WK = nn.Linear(in_features=embed_dim, out_features=embed_dim, bias=False)
-        self.WV = nn.Linear(in_features=embed_dim, out_features=embed_dim, bias=False)
+        self.WQ = nn.Linear(in_features=embed_dim, out_features=embed_dim)
+        self.WK = nn.Linear(in_features=embed_dim, out_features=embed_dim)
+        self.WV = nn.Linear(in_features=embed_dim, out_features=embed_dim)
+
+        self.qrelu = nn.LeakyReLU(negative_slope=0.2)
+        self.krelu = nn.LeakyReLU(negative_slope=0.2)
+        self.vrelu = nn.LeakyReLU(negative_slope=0.2)
 
         self.softmax = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(p=dropout)
 
+        torch.nn.init.xavier_uniform_(self.WQ.weight)
+        torch.nn.init.xavier_uniform_(self.WK.weight)
+        torch.nn.init.xavier_uniform_(self.WV.weight)
+
+        torch.nn.init.zeros_(self.WQ.bias)
+        torch.nn.init.zeros_(self.WK.bias)
+        torch.nn.init.zeros_(self.WV.bias)
+
     def forward(
-        self, query: Tensor, key: Tensor, value: Tensor, attn_mask: Union[Tensor, None] = None
+        self, query: Tensor, key: Tensor, value: Tensor, q_mask: Tensor, k_mask: Tensor
     ) -> Tensor:
         query = self.WQ.forward(query)
         key = self.WK.forward(key)
         value = self.WV.forward(value)
 
-        query = torch.concat(torch.split(query, self.d // self.H, dim=2), dim=0)
-        key = torch.concat(torch.split(key, self.d // self.H, dim=2), dim=0)
-        value = torch.concat(torch.split(value, self.d // self.H, dim=2), dim=0)
+        query = self.qrelu.forward(query)
+        key = self.krelu.forward(key)
+        value = self.vrelu.forward(value)
 
-        if attn_mask is not None:
-            add_mask = torch.where(attn_mask, 0.0, -1e6)
-            out = torch.baddbmm(add_mask, query, key.transpose(1, 2))
-        else:
-            out = torch.bmm(query, key.transpose(1, 2))
+        query = torch.cat(torch.split(query, self.d // self.H, dim=2), dim=0)
+        key = torch.cat(torch.split(key, self.d // self.H, dim=2), dim=0)
+        value = torch.cat(torch.split(value, self.d // self.H, dim=2), dim=0)
 
-        out /= (self.d / self.H) ** 0.5
+        mat1, mat2 = q_mask.unsqueeze(1).transpose(1, 2), k_mask.unsqueeze(1)
+        attn_mask = torch.bmm(mat1, mat2).bool()
+        attn_mask = torch.tile(attn_mask, (self.H, 1, 1))
+        add_mask = torch.where(attn_mask, 0.0, -(2**32) + 1.0)
+
+        out = torch.baddbmm(add_mask, query, key.transpose(1, 2))
+        out = out / (self.d / self.H) ** 0.5
         out = self.softmax.forward(out)
-        out = out * attn_mask
+
+        # weight_mask = torch.tile(q_mask, (self.H, 1)).unsqueeze(2)
+        # out = out * weight_mask
         out = self.dropout.forward(out)
 
         out = torch.bmm(out, value)
-        out = torch.concat(torch.split(out, out.shape[0] // self.H, dim=0), dim=2)
+        out = torch.cat(torch.split(out, out.shape[0] // self.H, dim=0), dim=2)
 
         return out
 
@@ -61,13 +79,24 @@ class Embeddings(nn.Module):
         self.feats_embed = nn.Linear(in_features=n_ctx + n_attrs, out_features=g)
         self.joint_embed = nn.Linear(in_features=g + d, out_features=d)
 
-    def forward(self, x: Tensor, q: Tensor, mask: Tensor) -> Tensor:
-        z = self.items_embed.forward(x)
-        z = z * (self.d**0.5)  # Scale embedding output
+        torch.nn.init.xavier_uniform_(self.items_embed.weight)
+        # torch.nn.init.normal_(self.items_embed.weight, std=0.01)
+        torch.nn.init.normal_(self.feats_embed.weight, std=0.01)
+        torch.nn.init.normal_(self.joint_embed.weight, std=0.01)
+
+        self.items_embed._fill_padding_idx_with_zero()
+        torch.nn.init.zeros_(self.feats_embed.bias)
+        torch.nn.init.zeros_(self.joint_embed.bias)
+
+    def forward(self, x: Tensor, q: Tensor, mask: Tensor, scale: bool = True) -> Tensor:
         q = self.feats_embed.forward(q)
+        z = self.items_embed.forward(x)
+
+        if scale:
+            z = z * (self.d**0.5)  # Scale embedding output
 
         e = self.joint_embed.forward(torch.cat((z, q), dim=-1))
-        e = e * mask.unsqueeze(2)
+        # e = e * mask.unsqueeze(2)
 
         return e
 
@@ -77,33 +106,30 @@ class SelfAttentionBlock(nn.Module):
     def __init__(self, d: int, H: int, p: float, residual: bool):
         super().__init__()
 
-        self.H = H
         self.residual = residual
 
         # Attention
         self.norm1 = nn.LayerNorm(normalized_shape=d)
-        # self.attn = nn.MultiheadAttention(embed_dim=d, num_heads=H, dropout=p, batch_first=True)
         self.attn = MultiHeadAttention(embed_dim=d, num_heads=H, dropout=p)
 
         # FFN
         self.norm2 = nn.LayerNorm(normalized_shape=d)
         self.ffn_1 = nn.Conv1d(in_channels=d, out_channels=d, kernel_size=1)
-        self.activation = nn.LeakyReLU()
-        self.dropout2 = nn.Dropout(p=p)
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2)
+        self.dropout1 = nn.Dropout(p=p)
 
         self.ffn_2 = nn.Conv1d(in_channels=d, out_channels=d, kernel_size=1)
-        self.dropout3 = nn.Dropout(p=p)
+        self.dropout2 = nn.Dropout(p=p)
+
+        torch.nn.init.xavier_uniform_(self.ffn_1.weight)
+        torch.nn.init.xavier_uniform_(self.ffn_2.weight)
+
+        torch.nn.init.zeros_(self.ffn_1.bias)  # type: ignore
+        torch.nn.init.zeros_(self.ffn_2.bias)  # type: ignore
 
     def forward(self, x: Tensor, mask: Tensor) -> Tensor:
         q = self.norm1.forward(x)
-
-        # s, _ = self.attn.forward(q, x, x, key_padding_mask=mask == 0, need_weights=False)
-        # s = s * mask.unsqueeze(2)
-        mat1, mat2 = mask.unsqueeze(1).transpose(1, 2), mask.unsqueeze(1)
-        attn_mask = torch.bmm(mat1, mat2).bool()
-        attn_mask = torch.tile(attn_mask, (self.H, 1, 1))
-
-        s = self.attn.forward(q, x, x, attn_mask=attn_mask)
+        s = self.attn.forward(q, x, x, q_mask=mask, k_mask=mask)
 
         if self.residual:
             s = torch.mul(s, q)  # Multiplicative residual connection
@@ -112,18 +138,19 @@ class SelfAttentionBlock(nn.Module):
         f = s.transpose(1, 2)  # Change dim order to get channel dim to middle (for Conv1d)
 
         f = self.ffn_1.forward(f)
-        f = self.activation.forward(f)
-        f = self.dropout2.forward(f)
+        f = self.lrelu.forward(f)
         # f = f * mask.unsqueeze(1)
+        f = self.dropout1.forward(f)
 
         f = self.ffn_2.forward(f)
-        f = self.dropout3.forward(f)
         # f = f * mask.unsqueeze(1)
-        f = f.transpose(1, 2)
+        f = self.dropout2.forward(f)
+        f = f.transpose(1, 2)  # Change dim order back
 
         if self.residual:
-            f = torch.add(f, s)  # Multiplicative residual connection
+            f = torch.add(f, s)  # Additive residual connection
 
+        # f = f * mask.unsqueeze(2)
         return f
 
 
@@ -132,34 +159,27 @@ class CrossAttentionBlock(nn.Module):
     def __init__(self, d: int, H: int, p: float, residual: bool):
         super().__init__()
 
-        self.H = H
         self.residual = residual
 
         # Attention
-        # self.attn = nn.MultiheadAttention(embed_dim=d, num_heads=H, dropout=p, batch_first=True)
         self.attn = MultiHeadAttention(embed_dim=d, num_heads=H, dropout=p)
 
         # FFN
-        self.ffn = nn.Conv1d(in_channels=d, out_channels=1, kernel_size=1)
+        self.ffn = nn.Linear(in_features=d, out_features=1)
         self.sig = nn.Sigmoid()
 
-    def forward(self, e: Tensor, e_mask: Tensor, f: Tensor, f_mask: Tensor) -> Tensor:
-        mat1, mat2 = e_mask.unsqueeze(1).transpose(1, 2), f_mask.unsqueeze(1)
-        attn_mask = torch.bmm(mat1, mat2).bool()
-        attn_mask = torch.tile(attn_mask, (self.H, 1, 1))
+        torch.nn.init.normal_(self.ffn.weight, std=0.01)
+        torch.nn.init.zeros_(self.ffn.bias)
 
-        s = self.attn.forward(e, f, f, attn_mask=attn_mask)
-        # s, _ = self.attn.forward(e, f, f, key_padding_mask=f_mask == 0, need_weights=False)
-        # s = s * e_mask.unsqueeze(2)
+    def forward(self, e: Tensor, e_mask: Tensor, f: Tensor, f_mask: Tensor) -> Tensor:
+        s = self.attn.forward(e, f, f, q_mask=e_mask, k_mask=f_mask)
 
         if self.residual:
             s = torch.mul(s, e)  # Multiplicative residual connection
 
-        s = s.transpose(1, 2)  # Change dim order to get channel dim to middle (for Conv1d)
-
         y = self.ffn.forward(s)
+        # y = y * e_mask.unsqueeze(2)
         y = self.sig.forward(y)
-        # y = y * e_mask.unsqueeze(1)
         y = y.squeeze()  # Squeeze output ([batch_size, 1, seq_size] -> [batch_size, seq_size])
 
         return y
@@ -205,29 +225,12 @@ class CARCA(nn.Module):
         for target in targets:
             o_x, o_q = target
             o_mask = get_mask(o_x)
-            o_e = self.embeds.forward(o_x, o_q, o_mask)
+            o_e = self.embeds.forward(o_x, o_q, o_mask, scale=False)
 
             y_pred = self.ca_blocks.forward(o_e, o_mask, p_e, p_mask)
             y_preds.append(y_pred)
 
-        return torch.concat(y_preds, dim=-1)
-
-    # def forward(
-    #     self, p_x: Tensor, p_q: Tensor, p_mask: Tensor, o_x: Tensor, o_q: Tensor, o_mask: Tensor
-    # ) -> Tensor:
-    #     p_e = self.embeds.forward(p_x, p_q, p_mask)
-    #     p_e = self.dropout.forward(p_e)
-    #     o_e = self.embeds.forward(o_x, o_q, o_mask)
-
-
-#
-#     for block in self.sa_blocks:
-#         p_e = block.forward(p_e, p_mask)
-#
-#     p_e = self.norm.forward(p_e)
-#
-#     y_pred = self.ca_blocks.forward(o_e, o_mask, p_e, p_mask)
-#     return y_pred
+        return torch.cat(y_preds, dim=-1)
 
 
 class BinaryCrossEntropy(nn.Module):

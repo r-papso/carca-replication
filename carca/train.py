@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from typing import Tuple
 
@@ -59,9 +60,14 @@ def train(
     epochs: int,
     top_k: int = 10,
     verbose: int = 1,
+    early_stop: int = 10,
+    checkpoint: str = "model",
 ) -> CARCA:
+    os.makedirs(checkpoint, exist_ok=True)
+
     loss_fn = BinaryCrossEntropy()
     model = model.train().to(device)
+    best_hr, no_improve = 0, 0
 
     for epoch in range(1, epochs + 1):
         sum_loss = 0
@@ -88,13 +94,26 @@ def train(
             time = datetime.now().strftime("%H:%M:%S")
             print(f"{time} - Epoch {(epoch):03d}: Loss = {(sum_loss / len(train_loader)):.4f}")
 
-        if val_loader is not None and verbose in [1, 2]:
-            # Evaluate model
-            HR, NDCG, loss = evaluate(model, val_loader, device, top_k)
+        # Evaluate model
+        HR, NDCG, loss = evaluate(model, val_loader, device, top_k)
+
+        if HR > best_hr:
+            fs = [f for f in os.listdir(checkpoint) if os.path.isfile(os.path.join(checkpoint, f))]
+            _ = [os.remove(os.path.join(checkpoint, f)) for f in fs]
+
+            best_hr = HR
+            no_improve = 0
+            torch.save(model, os.path.join(checkpoint, f"{epoch:03d}_{HR:.4f}.pth"))
+        else:
+            no_improve += 1
+
+        if verbose in [1, 2]:
             time = datetime.now().strftime("%H:%M:%S")
-            print(
-                f"{time} - Epoch {(epoch):03d}: Loss = {loss:.4f} HR = {HR:.4f}, NDCG = {NDCG:.4f}"
-            )
+            print(f"{time} - Epoch {epoch:03d}: Loss = {loss:.4f} HR = {HR:.4f}, NDCG = {NDCG:.4f}")
             model = model.train().to(device)
+
+        if no_improve >= early_stop:
+            print(f"No improvement in {no_improve} epochs, early stopping...")
+            break
 
     return model

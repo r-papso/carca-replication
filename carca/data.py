@@ -77,7 +77,7 @@ def pad_profile(profile: List[int], max_len: int, mode: str) -> List[int]:
         end = max(1, len(profile) - n_excluded)
 
     if mode == "test" and len(profile) > 3:
-        n_excluded = 2
+        n_excluded = 1
         start = max(0, len(profile) - n_excluded - max_len)
         end = max(1, len(profile) - n_excluded)
 
@@ -85,15 +85,16 @@ def pad_profile(profile: List[int], max_len: int, mode: str) -> List[int]:
 
 
 def sample_negatives(profile: List[int], n_items: int, n: int) -> List[int]:
-    sample = []
+    sample = set()
+    p_set = set(profile)
 
     while len(sample) < n:
         item_id = random.randint(1, n_items - 1)
 
-        if item_id not in sample and item_id not in profile:
-            sample.append(item_id)
+        if item_id not in sample and item_id not in p_set:
+            sample.add(item_id)
 
-    return sample
+    return list(sample)
 
 
 def get_train_sequences(
