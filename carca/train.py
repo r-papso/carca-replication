@@ -1,10 +1,11 @@
 import os
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, Union
 
 import torch
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import _LRScheduler
 
 from .model import CARCA, BinaryCrossEntropy
 from .utils import get_mask, to
@@ -62,6 +63,7 @@ def train(
     verbose: int = 1,
     early_stop: int = 10,
     checkpoint: str = "model",
+    scheduler: Union[_LRScheduler, None] = None,
 ) -> CARCA:
     os.makedirs(checkpoint, exist_ok=True)
 
@@ -93,6 +95,9 @@ def train(
         if verbose in [1, 2]:
             time = datetime.now().strftime("%H:%M:%S")
             print(f"{time} - Epoch {(epoch):03d}: Loss = {(sum_loss / len(train_loader)):.4f}")
+
+        if scheduler is not None:
+            scheduler.step()
 
         # Evaluate model
         HR, NDCG, loss = evaluate(model, val_loader, device, top_k)

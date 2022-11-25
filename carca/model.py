@@ -27,13 +27,13 @@ class MultiHeadAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(p=dropout)
 
-        torch.nn.init.xavier_uniform_(self.WQ.weight)
-        torch.nn.init.xavier_uniform_(self.WK.weight)
-        torch.nn.init.xavier_uniform_(self.WV.weight)
+        nn.init.xavier_uniform_(self.WQ.weight)
+        nn.init.xavier_uniform_(self.WK.weight)
+        nn.init.xavier_uniform_(self.WV.weight)
 
-        torch.nn.init.zeros_(self.WQ.bias)
-        torch.nn.init.zeros_(self.WK.bias)
-        torch.nn.init.zeros_(self.WV.bias)
+        nn.init.zeros_(self.WQ.bias)
+        nn.init.zeros_(self.WK.bias)
+        nn.init.zeros_(self.WV.bias)
 
     def forward(
         self, query: Tensor, key: Tensor, value: Tensor, q_mask: Tensor, k_mask: Tensor
@@ -59,8 +59,8 @@ class MultiHeadAttention(nn.Module):
         out = out / (self.d / self.H) ** 0.5
         out = self.softmax.forward(out)
 
-        # weight_mask = torch.tile(q_mask, (self.H, 1)).unsqueeze(2)
-        # out = out * weight_mask
+        weight_mask = torch.tile(q_mask, (self.H, 1)).unsqueeze(2)
+        out = out * weight_mask
         out = self.dropout.forward(out)
 
         out = torch.bmm(out, value)
@@ -79,14 +79,14 @@ class Embeddings(nn.Module):
         self.feats_embed = nn.Linear(in_features=n_ctx + n_attrs, out_features=g)
         self.joint_embed = nn.Linear(in_features=g + d, out_features=d)
 
-        torch.nn.init.xavier_uniform_(self.items_embed.weight)
-        # torch.nn.init.normal_(self.items_embed.weight, std=0.01)
-        torch.nn.init.normal_(self.feats_embed.weight, std=0.01)
-        torch.nn.init.normal_(self.joint_embed.weight, std=0.01)
+        nn.init.xavier_uniform_(self.items_embed.weight)
+        # nn.init.normal_(self.items_embed.weight, std=0.01)
+        nn.init.normal_(self.feats_embed.weight, std=0.01)
+        nn.init.normal_(self.joint_embed.weight, std=0.01)
 
         self.items_embed._fill_padding_idx_with_zero()
-        torch.nn.init.zeros_(self.feats_embed.bias)
-        torch.nn.init.zeros_(self.joint_embed.bias)
+        nn.init.zeros_(self.feats_embed.bias)
+        nn.init.zeros_(self.joint_embed.bias)
 
     def forward(self, x: Tensor, q: Tensor, mask: Tensor, scale: bool = True) -> Tensor:
         q = self.feats_embed.forward(q)
@@ -96,7 +96,7 @@ class Embeddings(nn.Module):
             z = z * (self.d**0.5)  # Scale embedding output
 
         e = self.joint_embed.forward(torch.cat((z, q), dim=-1))
-        # e = e * mask.unsqueeze(2)
+        e = e * mask.unsqueeze(2)
 
         return e
 
@@ -121,11 +121,11 @@ class SelfAttentionBlock(nn.Module):
         self.ffn_2 = nn.Conv1d(in_channels=d, out_channels=d, kernel_size=1)
         self.dropout2 = nn.Dropout(p=p)
 
-        torch.nn.init.xavier_uniform_(self.ffn_1.weight)
-        torch.nn.init.xavier_uniform_(self.ffn_2.weight)
+        nn.init.xavier_uniform_(self.ffn_1.weight)
+        nn.init.xavier_uniform_(self.ffn_2.weight)
 
-        torch.nn.init.zeros_(self.ffn_1.bias)  # type: ignore
-        torch.nn.init.zeros_(self.ffn_2.bias)  # type: ignore
+        nn.init.zeros_(self.ffn_1.bias)  # type: ignore
+        nn.init.zeros_(self.ffn_2.bias)  # type: ignore
 
     def forward(self, x: Tensor, mask: Tensor) -> Tensor:
         q = self.norm1.forward(x)
@@ -139,18 +139,16 @@ class SelfAttentionBlock(nn.Module):
 
         f = self.ffn_1.forward(f)
         f = self.lrelu.forward(f)
-        # f = f * mask.unsqueeze(1)
         f = self.dropout1.forward(f)
 
         f = self.ffn_2.forward(f)
-        # f = f * mask.unsqueeze(1)
         f = self.dropout2.forward(f)
         f = f.transpose(1, 2)  # Change dim order back
 
         if self.residual:
             f = torch.add(f, s)  # Additive residual connection
 
-        # f = f * mask.unsqueeze(2)
+        f = f * mask.unsqueeze(2)
         return f
 
 
@@ -168,8 +166,8 @@ class CrossAttentionBlock(nn.Module):
         self.ffn = nn.Linear(in_features=d, out_features=1)
         self.sig = nn.Sigmoid()
 
-        torch.nn.init.normal_(self.ffn.weight, std=0.01)
-        torch.nn.init.zeros_(self.ffn.bias)
+        nn.init.normal_(self.ffn.weight, std=0.01)
+        nn.init.zeros_(self.ffn.bias)
 
     def forward(self, e: Tensor, e_mask: Tensor, f: Tensor, f_mask: Tensor) -> Tensor:
         s = self.attn.forward(e, f, f, q_mask=e_mask, k_mask=f_mask)
@@ -178,9 +176,9 @@ class CrossAttentionBlock(nn.Module):
             s = torch.mul(s, e)  # Multiplicative residual connection
 
         y = self.ffn.forward(s)
-        # y = y * e_mask.unsqueeze(2)
         y = self.sig.forward(y)
-        y = y.squeeze()  # Squeeze output ([batch_size, 1, seq_size] -> [batch_size, seq_size])
+        y = y.squeeze()  # Squeeze output ([batch_size, seq_size, 1] -> [batch_size, seq_size])
+        y = y * e_mask
 
         return y
 
@@ -222,8 +220,7 @@ class CARCA(nn.Module):
         p_e = self.norm.forward(p_e)
         y_preds = []
 
-        for target in targets:
-            o_x, o_q = target
+        for o_x, o_q in targets:
             o_mask = get_mask(o_x)
             o_e = self.embeds.forward(o_x, o_q, o_mask, scale=False)
 
