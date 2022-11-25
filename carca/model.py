@@ -175,6 +175,8 @@ class CrossAttentionBlock(nn.Module):
         if self.residual:
             s = torch.mul(s, e)  # Multiplicative residual connection
 
+        s = s * e_mask.unsqueeze(2)
+
         y = self.ffn.forward(s)
         y = self.sig.forward(y)
         y = y.squeeze()  # Squeeze output ([batch_size, seq_size, 1] -> [batch_size, seq_size])
