@@ -135,7 +135,7 @@ class SelfAttentionBlock(nn.Module):
             s = torch.mul(s, q)  # Multiplicative residual connection
 
         s = self.norm2.forward(s)
-        f = s.transpose(1, 2)  # Change dim order to get channel dim to middle (for Conv1d)
+        f = s.transpose(1, 2).contiguous()  # Change dim order to get channel dim to middle
 
         f = self.ffn_1.forward(f)
         f = self.lrelu.forward(f)
@@ -143,7 +143,7 @@ class SelfAttentionBlock(nn.Module):
 
         f = self.ffn_2.forward(f)
         f = self.dropout2.forward(f)
-        f = f.transpose(1, 2)  # Change dim order back
+        f = f.transpose(1, 2).contiguous()  # Change dim order back
 
         if self.residual:
             f = torch.add(f, s)  # Additive residual connection
