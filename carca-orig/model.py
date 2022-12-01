@@ -88,10 +88,12 @@ class Embeddings(nn.Module):
         nn.init.zeros_(self.feats_embed.bias)
         nn.init.zeros_(self.joint_embed.bias)
 
-    def forward(self, x: Tensor, q: Tensor, mask: Tensor) -> Tensor:
+    def forward(self, x: Tensor, q: Tensor, mask: Tensor, scale: bool = True) -> Tensor:
         q = self.feats_embed.forward(q)
         z = self.items_embed.forward(x)
-        z = z * (self.d**0.5)  # Scale embedding output
+
+        if scale:
+            z = z * (self.d**0.5)  # Scale embedding output
 
         e = self.joint_embed.forward(torch.cat((z, q), dim=-1))
         e = e * mask.unsqueeze(2)
@@ -222,7 +224,7 @@ class CARCA(nn.Module):
 
         for o_x, o_q in targets:
             o_mask = get_mask(o_x)
-            o_e = self.embeds.forward(o_x, o_q, o_mask)
+            o_e = self.embeds.forward(o_x, o_q, o_mask, scale=False)
 
             y_pred = self.ca_blocks.forward(o_e, o_mask, p_e, p_mask)
             y_preds.append(y_pred)
