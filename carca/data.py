@@ -36,7 +36,8 @@ def load_profiles(dataset_name):
 
     with open(f"{DATA_PATH}/{dataset_name}_sorted.txt", "r") as df:
         for line in df:
-            user_id, item_id = list(map(int, line.strip().split(" ")))
+            values = line.strip().split(" ")
+            user_id, item_id = int(values[0]), int(values[1])
             user_ids.add(user_id)
             item_ids.add(item_id)
             profiles[user_id].append(item_id)
