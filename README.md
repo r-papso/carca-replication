@@ -2,8 +2,6 @@
 
 Replication of a state-of-the-art sequential recommendation method presented on RecSys2022. CARCA [1] is a context and attribute aware sequential model utilizing attention mechanism and Transformer [2] architecture to capture complex non-linear relations between all items in the sequence and candidate items to be recommended.
 
-The paper can be found [here](https://arxiv.org/pdf/2204.06519.pdf).
-
 ## Requirements
 
 ```bash
