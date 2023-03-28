@@ -130,3 +130,7 @@ dmypy.json
 
 # Custom
 data/*
+notebooks/data_analysis.ipynb
+notebooks/test_input.ipynb
+notebooks/test_mha.ipynb
+notebooks/test.ipynb
