@@ -45,55 +45,36 @@ def load_profiles(dataset_name):
     return list(user_ids), list(item_ids), profiles
 
 
-# def pad_profile(profile: List[int], max_len: int, mode: str) -> List[int]:
-#     if mode not in ["train", "val", "test"]:
-#         raise ValueError(f"Invalid mode: {mode}")
-#
-#     start, end = 0, 0
-#
-#     if len(profile) <= 3:
-#         if mode == "train" and len(profile) == 2:
-#             start, end = 0, 2
-#
-#         if mode == "val" and len(profile) == 3:
-#             start, end = 0, 2
-#
-#         if mode == "test" and len(profile) == 3:
-#             start, end = 0, 3
-#     else:
-#         if mode == "train" and len(profile) > 1:
-#             n_excluded = 2
-#             start = max(0, len(profile) - n_excluded - max_len - 1)
-#             end = max(1, len(profile) - n_excluded)
-#
-#         if mode == "val" and len(profile) > 2:
-#             n_excluded = 1
-#             start = max(0, len(profile) - n_excluded - max_len - 1)
-#             end = max(1, len(profile) - n_excluded)
-#
-#         if mode == "test" and len(profile) > 3:
-#             n_excluded = 0
-#             start = max(0, len(profile) - n_excluded - max_len - 1)
-#             end = max(1, len(profile) - n_excluded)
-#
-#     return list(range(start, end))
-
-
 def pad_profile(profile: List[int], max_len: int, mode: str) -> List[int]:
-    if mode not in ["train", "val"]:
+    if mode not in ["train", "val", "test"]:
         raise ValueError(f"Invalid mode: {mode}")
 
     start, end = 0, 0
 
-    if mode == "train" and len(profile) > 1:
-        n_excluded = 1
-        start = max(0, len(profile) - n_excluded - max_len - 1)
-        end = max(2, len(profile) - n_excluded)
+    if len(profile) <= 3:
+        if mode == "train" and len(profile) == 2:
+            start, end = 0, 2
 
-    if mode == "val" and len(profile) > 2:
-        n_excluded = 0
-        start = max(0, len(profile) - n_excluded - max_len - 1)
-        end = max(3, len(profile) - n_excluded)
+        if mode == "val" and len(profile) == 3:
+            start, end = 0, 2
+
+        if mode == "test" and len(profile) == 3:
+            start, end = 0, 3
+    else:
+        if mode == "train":
+            n_excluded = 2
+            start = max(0, len(profile) - n_excluded - max_len - 1)
+            end = max(1, len(profile) - n_excluded)
+
+        if mode == "val":
+            n_excluded = 1
+            start = max(0, len(profile) - n_excluded - max_len - 1)
+            end = max(1, len(profile) - n_excluded)
+
+        if mode == "test":
+            n_excluded = 0
+            start = max(0, len(profile) - n_excluded - max_len - 1)
+            end = max(1, len(profile) - n_excluded)
 
     return list(range(start, end))
 
@@ -212,9 +193,7 @@ def get_sequences(
     if mode == "train":
         return get_train_sequences(user_id, profile, profile_seq_len, attrs, ctx)
     else:
-        return get_test_sequences(
-            user_id, profile, profile_seq_len, target_seq_len, attrs, ctx, mode
-        )
+        return get_test_sequences(user_id, profile, profile_seq_len, target_seq_len, attrs, ctx, mode)
 
 
 class CARCADataset(Dataset):
