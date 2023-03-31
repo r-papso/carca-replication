@@ -9,8 +9,13 @@ from torch.utils.data import Dataset
 DATA_PATH = "../../data"
 
 
-def load_ctx(dataset_name) -> Dict[Tuple[int, int], np.ndarray]:
-    with open(f"{DATA_PATH}/{dataset_name}_ctx.dat", "rb") as rf:
+def set_datapath(path: str) -> None:
+    global DATA_PATH
+    DATA_PATH = path
+
+
+def load_ctx(ctx_file: str) -> Dict[Tuple[int, int], np.ndarray]:
+    with open(f"{DATA_PATH}/{ctx_file}", "rb") as rf:
         ctx = pickle.load(rf)
 
     # Cast context values from list to numpy array
@@ -20,8 +25,8 @@ def load_ctx(dataset_name) -> Dict[Tuple[int, int], np.ndarray]:
     return ctx
 
 
-def load_attrs(dataset_name) -> np.ndarray:
-    with open(f"{DATA_PATH}/{dataset_name}_attrs.dat", "rb") as rf:
+def load_attrs(attr_file: str) -> np.ndarray:
+    with open(f"{DATA_PATH}/{attr_file}", "rb") as rf:
         attrs = pickle.load(rf)
 
     # Add zero row for <pad> item
@@ -30,11 +35,11 @@ def load_attrs(dataset_name) -> np.ndarray:
     return attrs
 
 
-def load_profiles(dataset_name):
+def load_profiles(profile_file: str):
     user_ids, item_ids = set(), set()
     profiles = defaultdict(list)
 
-    with open(f"{DATA_PATH}/{dataset_name}_sorted.txt", "r") as df:
+    with open(f"{DATA_PATH}/{profile_file}", "r") as df:
         for line in df:
             values = line.strip().split(" ")
             user_id, item_id = int(values[0]), int(values[1])
@@ -99,12 +104,16 @@ def get_train_sequences(
     attrs: np.ndarray,
     ctx: Dict[Tuple[int, int], np.ndarray],
 ) -> Tuple[np.ndarray, ...]:
-    q_len = attrs.shape[1] + next(iter(ctx.values())).shape[0]
+    a_len, c_len = attrs.shape[1], next(iter(ctx.values())).shape[0]
 
     p_x = np.zeros(seq_len, dtype=np.int32)
     o_x = np.zeros(seq_len * 2, dtype=np.int32)
-    p_q = np.zeros((seq_len, q_len), dtype=np.float32)
-    o_q = np.zeros((seq_len * 2, q_len), dtype=np.float32)
+
+    p_a = np.zeros((seq_len, a_len), dtype=np.float32)
+    o_a = np.zeros((seq_len * 2, a_len), dtype=np.float32)
+
+    p_c = np.zeros((seq_len, c_len), dtype=np.float32)
+    o_c = np.zeros((seq_len * 2, c_len), dtype=np.float32)
 
     padded_idxs = pad_profile(profile, seq_len, "train")
     neg_sample = sample_negatives(profile, attrs.shape[0], len(padded_idxs))
@@ -118,21 +127,26 @@ def get_train_sequences(
 
         a = attrs[profile[pi]]
         c = ctx[(user_id, profile[pi])]
-        p_q[idx] = np.concatenate((a, c))
+        p_a[idx] = a
+        p_c[idx] = c
+        # p_q[idx] = np.concatenate((a, c))
 
         a = attrs[profile[pi + 1]]
         c = ctx[(user_id, profile[pi + 1])]
-        o_q[idx] = np.concatenate((a, c))
+        o_a[idx] = a
+        o_c[idx] = c
+        # o_q[idx] = np.concatenate((a, c))
 
         a = attrs[neg_sample[i]]
-        # Assign same context to negative sample as to positive sample
-        c = ctx[(user_id, profile[pi + 1])]
-        o_q[seq_len + idx] = np.concatenate((a, c))
+        c = ctx[(user_id, profile[pi + 1])]  # Assign same context to negative sample as to positive sample
+        o_a[seq_len + idx] = a
+        o_c[seq_len + idx] = c
+        # o_q[seq_len + idx] = np.concatenate((a, c))
 
     y_true = np.zeros(seq_len * 2, dtype=np.int32)
     y_true[np.where(p_x > 0)] = 1
 
-    return p_x, p_q, o_x, o_q, y_true
+    return p_x, p_a, p_c, o_x, o_a, o_c, y_true
 
 
 def get_test_sequences(
@@ -144,41 +158,52 @@ def get_test_sequences(
     ctx: Dict[Tuple[int, int], np.ndarray],
     mode: str,
 ) -> Tuple[np.ndarray, ...]:
-    q_len = attrs.shape[1] + next(iter(ctx.values())).shape[0]
+    a_len, c_len = attrs.shape[1], next(iter(ctx.values())).shape[0]
 
     p_x = np.zeros(profile_seq_len, dtype=np.int32)
     o_x = np.zeros(target_seq_len + 1, dtype=np.int32)
-    p_q = np.zeros((profile_seq_len, q_len), dtype=np.float32)
-    o_q = np.zeros((target_seq_len + 1, q_len), dtype=np.float32)
+
+    p_a = np.zeros((profile_seq_len, a_len), dtype=np.float32)
+    o_a = np.zeros((target_seq_len + 1, a_len), dtype=np.float32)
+
+    p_c = np.zeros((profile_seq_len, c_len), dtype=np.float32)
+    o_c = np.zeros((target_seq_len + 1, c_len), dtype=np.float32)
 
     padded_idxs = pad_profile(profile, profile_seq_len, mode)
     neg_samples = sample_negatives(profile, attrs.shape[0], target_seq_len)
 
     one_out = padded_idxs[-1]
+    o_x[0] = profile[one_out]
+
     a = attrs[profile[one_out]]
     c = ctx[(user_id, profile[one_out])]
-    o_x[0] = profile[one_out]
-    o_q[0] = np.concatenate((a, c))
+    o_a[0] = a
+    o_c[0] = c
+    # o_q[0] = np.concatenate((a, c))
 
     for i, pi in enumerate(reversed(padded_idxs[:-1])):
         idx = profile_seq_len - i - 1
+        p_x[idx] = profile[pi]
 
         a = attrs[profile[pi]]
         c = ctx[(user_id, profile[pi])]
-        p_x[idx] = profile[pi]
-        p_q[idx] = np.concatenate((a, c))
+        p_a[idx] = a
+        p_c[idx] = c
+        # p_q[idx] = np.concatenate((a, c))
 
     for i, oi in enumerate(neg_samples, start=1):
-        a = attrs[oi]
-        # Assign same context to negatives as to one-out positive
-        c = ctx[(user_id, profile[one_out])]
         o_x[i] = oi
-        o_q[i] = np.concatenate((a, c))
+
+        a = attrs[oi]
+        c = ctx[(user_id, profile[one_out])]  # Assign same context to negatives as to one-out positive
+        o_a[i] = a
+        o_c[i] = c
+        # o_q[i] = np.concatenate((a, c))
 
     y_true = np.zeros(target_seq_len + 1, dtype=np.int32)
     y_true[0] = 1
 
-    return p_x, p_q, o_x, o_q, y_true
+    return p_x, p_a, p_c, o_x, o_a, o_c, y_true
 
 
 def get_sequences(
@@ -237,4 +262,4 @@ class CARCADataset(Dataset):
         )
 
     def valid_user_ids(self, profiles: Dict[int, List[int]], seq_len: int, mode: str) -> List[int]:
-        return [uid for uid, profile in profiles.items() if pad_profile(profile, seq_len, mode)]
+        return [uid for uid, profile in profiles.items() if len(pad_profile(profile, seq_len, mode)) > 0]
