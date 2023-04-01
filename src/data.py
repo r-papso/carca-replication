@@ -129,19 +129,16 @@ def get_train_sequences(
         c = ctx[(user_id, profile[pi])]
         p_a[idx] = a
         p_c[idx] = c
-        # p_q[idx] = np.concatenate((a, c))
 
         a = attrs[profile[pi + 1]]
         c = ctx[(user_id, profile[pi + 1])]
         o_a[idx] = a
         o_c[idx] = c
-        # o_q[idx] = np.concatenate((a, c))
 
         a = attrs[neg_sample[i]]
         c = ctx[(user_id, profile[pi + 1])]  # Assign same context to negative sample as to positive sample
         o_a[seq_len + idx] = a
         o_c[seq_len + idx] = c
-        # o_q[seq_len + idx] = np.concatenate((a, c))
 
     y_true = np.zeros(seq_len * 2, dtype=np.int32)
     y_true[np.where(p_x > 0)] = 1
@@ -179,7 +176,6 @@ def get_test_sequences(
     c = ctx[(user_id, profile[one_out])]
     o_a[0] = a
     o_c[0] = c
-    # o_q[0] = np.concatenate((a, c))
 
     for i, pi in enumerate(reversed(padded_idxs[:-1])):
         idx = profile_seq_len - i - 1
@@ -189,7 +185,6 @@ def get_test_sequences(
         c = ctx[(user_id, profile[pi])]
         p_a[idx] = a
         p_c[idx] = c
-        # p_q[idx] = np.concatenate((a, c))
 
     for i, oi in enumerate(neg_samples, start=1):
         o_x[i] = oi
@@ -198,7 +193,6 @@ def get_test_sequences(
         c = ctx[(user_id, profile[one_out])]  # Assign same context to negatives as to one-out positive
         o_a[i] = a
         o_c[i] = c
-        # o_q[i] = np.concatenate((a, c))
 
     y_true = np.zeros(target_seq_len + 1, dtype=np.int32)
     y_true[0] = 1

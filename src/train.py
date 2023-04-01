@@ -7,7 +7,7 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import _LRScheduler
 
-from .model.carca import CARCA, BinaryCrossEntropy
+from .carca import CARCA, BinaryCrossEntropy
 from .utils import get_mask, to
 
 
@@ -73,7 +73,7 @@ def train(
     best_hr, no_improve = 0, 0
 
     start = datetime.now()
-    logpath = f"{start.year}_{start.month}_{start.day}_{start.hour}_{start.minute}_{start.second}.csv"
+    logpath = f"{start.year}-{start.month}-{start.day}T{start.hour}-{start.minute}-{start.second}.csv"
     logfile = open(f"./{datadir}/{logpath}", "a")
 
     for epoch in range(1, epochs + 1):
@@ -102,8 +102,8 @@ def train(
         # Print training status to stdout and logfile
         if verbose in [1, 2]:
             time = datetime.now().strftime("%H:%M:%S")
-            print(f"{time} - Epoch {(epoch):03d}: Loss = {(sum_loss / len(train_loader)):.4f}")
-            logfile.write(f"{time};{epoch};train;{sum_loss / len(train_loader)};0;0")
+            print(f"{time} - Epoch {(epoch):03d}: Train Loss = {(sum_loss / len(train_loader)):.4f}")
+            logfile.write(f"{time};{epoch};train;{sum_loss / len(train_loader)};;\n")
 
         # Update learning rate through LR scheduler
         if scheduler is not None:
@@ -127,20 +127,22 @@ def train(
         # Print validation status to stdout and logfile
         if verbose in [1, 2]:
             time = datetime.now().strftime("%H:%M:%S")
-            print(f"{time} - Epoch {epoch:03d}: Loss = {loss:.4f} HR = {HR:.4f}, NDCG = {NDCG:.4f}")
-            logfile.write(f"{time};{epoch};val;{loss};{HR};{NDCG}")
+            print(f"{time} - Epoch {epoch:03d}: Val Loss = {loss:.4f} HR = {HR:.4f}, NDCG = {NDCG:.4f}")
+            logfile.write(f"{time};{epoch};val;{loss};{HR};{NDCG}\n")
 
         # Early stop if no improvement
         if no_improve >= early_stop:
             print(f"No improvement in {no_improve} epochs, early stopping...")
             break
 
+        logfile.flush()
+
     # Print test results to stdout and logfile
     if test_loader is not None:
         HR, NDCG, loss = evaluate(model, test_loader, device, top_k)
         time = datetime.now().strftime("%H:%M:%S")
-        print(f"{time} - Epoch {epoch:03d}: Loss = {loss:.4f} HR = {HR:.4f}, NDCG = {NDCG:.4f}")
-        logfile.write(f"{time};{epoch};test;{loss};{HR};{NDCG}")
+        print(f"{time} - Epoch {epoch:03d}: Test Loss = {loss:.4f} HR = {HR:.4f}, NDCG = {NDCG:.4f}")
+        logfile.write(f"{time};{epoch};test;{loss};{HR};{NDCG}\n")
 
     logfile.close()
     return model
