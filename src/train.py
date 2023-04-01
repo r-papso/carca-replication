@@ -1,13 +1,14 @@
 import os
 from datetime import datetime
 from typing import Tuple, Union
+from .abstract import Model
 
 import torch
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import _LRScheduler
 
-from .carca import CARCA, BinaryCrossEntropy
+from .carca import BinaryCrossEntropy
 from .utils import get_mask, to
 
 
@@ -31,7 +32,7 @@ def compute_NDCG(y_pred: torch.Tensor, y_true: torch.Tensor, k: int) -> float:
     return torch.sum(scores).item()
 
 
-def evaluate(model: CARCA, loader: DataLoader, device: str, k: int) -> Tuple[float, float, float]:
+def evaluate(model: Model, loader: DataLoader, device: str, k: int) -> Tuple[float, float, float]:
     model = model.eval().to(device)
     loss_fn = BinaryCrossEntropy()
     HR, NDCG, total, sum_loss = 0, 0, 0, 0
@@ -53,7 +54,7 @@ def evaluate(model: CARCA, loader: DataLoader, device: str, k: int) -> Tuple[flo
 
 
 def train(
-    model: CARCA,
+    model: Model,
     train_loader: DataLoader,
     val_loader: DataLoader,
     test_loader: DataLoader,
@@ -65,7 +66,7 @@ def train(
     early_stop: int = 10,
     datadir: str = "model",
     scheduler: Union[_LRScheduler, None] = None,
-) -> CARCA:
+) -> Model:
     os.makedirs(datadir, exist_ok=True)
 
     loss_fn = BinaryCrossEntropy()
