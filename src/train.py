@@ -71,7 +71,7 @@ def train(
 
     loss_fn = BinaryCrossEntropy()
     model = model.train().to(device)
-    best_hr, no_improve = 0, 0
+    best, no_improve = 0, 0
 
     start = datetime.now()
     logpath = f"{start.year}-{start.month}-{start.day}T{start.hour}-{start.minute}-{start.second}.csv"
@@ -115,11 +115,11 @@ def train(
         model = model.train().to(device)
 
         # Save model if HR has increased
-        if HR > best_hr:
+        if NDCG > best:
             fs = [f for f in os.listdir(datadir) if os.path.isfile(os.path.join(datadir, f)) and f.endswith(".pth")]
             _ = [os.remove(os.path.join(datadir, f)) for f in fs]
 
-            best_hr = HR
+            best = NDCG
             no_improve = 0
             torch.save(model, os.path.join(datadir, f"{epoch:03d}_{HR:.4f}_{NDCG:.4f}.pth"))
         else:

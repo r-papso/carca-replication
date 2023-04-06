@@ -4,9 +4,11 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
+import torch
+from torch import Tensor
 from torch.utils.data import Dataset
 
-DATA_PATH = "../../data"
+DATA_PATH = "../data"
 
 
 def set_datapath(path: str) -> None:
@@ -246,13 +248,7 @@ class CARCADataset(Dataset):
         profile = self.profiles[user_id]
 
         return get_sequences(
-            user_id,
-            profile,
-            self.profile_seq_len,
-            self.target_seq_len,
-            self.attrs,
-            self.ctx,
-            self.mode,
+            user_id, profile, self.profile_seq_len, self.target_seq_len, self.attrs, self.ctx, self.mode
         )
 
     def valid_user_ids(self, profiles: Dict[int, List[int]], seq_len: int, mode: str) -> List[int]:

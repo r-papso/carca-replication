@@ -19,5 +19,32 @@ class Embedding(nn.Module, ABC):
         super().__init__()
 
     @abstractmethod
-    def forward(self, x: Tensor, a: Tensor, c: Tensor) -> Tensor:
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, target: bool) -> Tensor:
+        pass
+
+
+class Encoding(nn.Module, ABC):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    @abstractmethod
+    def forward(self, x: Tensor) -> Tensor:
+        pass
+
+
+class Encoder(nn.Module, ABC):
+    def __init__(self):
+        super().__init__()
+
+    @abstractmethod
+    def forward(self, x: Tensor, mask: Tensor) -> Tensor:
+        pass
+
+
+class Decoder(nn.Module, ABC):
+    def __init__(self):
+        super().__init__()
+
+    @abstractmethod
+    def forward(self, o: Tensor, o_mask: Tensor, p: Tensor, p_mask: Tensor) -> Tensor:
         pass

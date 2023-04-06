@@ -1,20 +1,74 @@
-from typing import List, Tuple
+import math
+from typing import Iterable, List, Tuple
+
 import torch
 import torch.nn as nn
 from torch import Tensor
 
-from .abstract import Embedding, Model
+from .abstract import Embedding, Model, Encoder, Decoder, Encoding
 from .utils import get_mask
+
+
+# ---------- Positional Encoding ---------- #
+
+
+class LearnableEncoding(Encoding):
+    def __init__(self, d: int, max_len: int):
+        super().__init__()
+
+        self.max_len = max_len
+        self.encoding = nn.Embedding(max_len, d)
+
+        nn.init.xavier_uniform_(self.encoding.weight)
+        self.encoding._fill_padding_idx_with_zero()
+
+    def forward(self, x: Tensor) -> Tensor:
+        positions = torch.arange(self.max_len, dtype=torch.long, device=x.device)
+        positions = positions.unsqueeze(0).expand([x.shape[0], self.max_len])
+        embedding = self.encoding.forward(positions)
+
+        x = x + embedding[:, : x.size(1), :]
+        return x
+
+
+class IdentityEncoding(Encoding):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x
+
+
+# Code from: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+class PositionalEncoding(Encoding):
+    def __init__(self, d_model: int, max_len: int):
+        super().__init__()
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(1, max_len, d_model)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
+        x = x + self.pe[:, : x.size(1), :]
+        return x
 
 
 # ---------- Embedding ---------- #
 
 
 class AllEmbedding(Embedding):
-    def __init__(self, n_items: int, d: int, g: int, n_ctx: int, n_attrs: int):
+    def __init__(self, n_items: int, d: int, g: int, n_ctx: int, n_attrs: int, enc: Encoding):
         super().__init__()
 
         self.d = d
+        self.enc = enc
 
         self.items_embed = nn.Embedding(num_embeddings=n_items, embedding_dim=d, padding_idx=0)
         self.feats_embed = nn.Linear(in_features=n_ctx + n_attrs, out_features=g)
@@ -29,20 +83,24 @@ class AllEmbedding(Embedding):
         nn.init.zeros_(self.feats_embed.bias)
         nn.init.zeros_(self.joint_embed.bias)
 
-    def forward(self, x: Tensor, a: Tensor, c: Tensor) -> Tensor:
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, target: bool) -> Tensor:
         q = self.feats_embed.forward(torch.cat((a, c), dim=-1))
         z = self.items_embed.forward(x)
         z = z * (self.d**0.5)  # Scale embedding output
-
         e = self.joint_embed.forward(torch.cat((z, q), dim=-1))
+
+        if not target:
+            e = self.enc.forward(e)  # Positional encoding
+
         return e
 
 
 class AttrCtxEmbedding(Embedding):
-    def __init__(self, d: int, g: int, n_ctx: int, n_attrs: int):
+    def __init__(self, d: int, g: int, n_ctx: int, n_attrs: int, enc: Encoding):
         super().__init__()
 
         self.d = d
+        self.enc = enc
 
         self.feats_embed = nn.Linear(in_features=n_ctx + n_attrs, out_features=g)
         self.joint_embed = nn.Linear(in_features=g, out_features=d)
@@ -53,17 +111,22 @@ class AttrCtxEmbedding(Embedding):
         nn.init.zeros_(self.feats_embed.bias)
         nn.init.zeros_(self.joint_embed.bias)
 
-    def forward(self, x: Tensor, a: Tensor, c: Tensor) -> Tensor:
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, target: bool) -> Tensor:
         q = self.feats_embed.forward(torch.cat((a, c), dim=-1))
         e = self.joint_embed.forward(q)
+
+        if not target:
+            e = self.enc.forward(e)  # Positional encoding
+
         return e
 
 
 class AttrEmbedding(Embedding):
-    def __init__(self, d: int, g: int, n_attrs: int):
+    def __init__(self, d: int, g: int, n_attrs: int, enc: Encoding):
         super().__init__()
 
         self.d = d
+        self.enc = enc
 
         self.feats_embed = nn.Linear(in_features=n_attrs, out_features=g)
         self.joint_embed = nn.Linear(in_features=g, out_features=d)
@@ -74,25 +137,34 @@ class AttrEmbedding(Embedding):
         nn.init.zeros_(self.feats_embed.bias)
         nn.init.zeros_(self.joint_embed.bias)
 
-    def forward(self, x: Tensor, a: Tensor, c: Tensor) -> Tensor:
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, target: bool) -> Tensor:
         q = self.feats_embed.forward(a)
         e = self.joint_embed.forward(q)
+
+        if not target:
+            e = self.enc.forward(e)  # Positional encoding
+
         return e
 
 
 class IdEmbedding(Embedding):
-    def __init__(self, n_items: int, d: int):
+    def __init__(self, n_items: int, d: int, pos: Encoding):
         super().__init__()
 
         self.d = d
+        self.pos = pos
         self.items_embed = nn.Embedding(num_embeddings=n_items, embedding_dim=d, padding_idx=0)
 
         nn.init.xavier_uniform_(self.items_embed.weight)
         self.items_embed._fill_padding_idx_with_zero()
 
-    def forward(self, x: Tensor, a: Tensor, c: Tensor) -> Tensor:
-        z = self.items_embed.forward(x)
-        e = z * (self.d**0.5)  # Scale embedding output
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, target: bool) -> Tensor:
+        e = self.items_embed.forward(x)
+        e = e * (self.d**0.5)  # Scale embedding output
+
+        if not target:
+            e = self.pos.forward(e)  # Positional encoding
+
         return e
 
 
@@ -112,10 +184,6 @@ class MultiHeadAttention(nn.Module):
         self.WK = nn.Linear(in_features=embed_dim, out_features=embed_dim)
         self.WV = nn.Linear(in_features=embed_dim, out_features=embed_dim)
 
-        self.qrelu = nn.LeakyReLU(negative_slope=0.2)
-        self.krelu = nn.LeakyReLU(negative_slope=0.2)
-        self.vrelu = nn.LeakyReLU(negative_slope=0.2)
-
         self.softmax = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(p=dropout)
 
@@ -127,30 +195,30 @@ class MultiHeadAttention(nn.Module):
         nn.init.zeros_(self.WK.bias)
         nn.init.zeros_(self.WV.bias)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, q_mask: Tensor, k_mask: Tensor) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, q_mask: Tensor, k_mask: Tensor, causal: bool
+    ) -> Tensor:
         query = self.WQ.forward(query)
         key = self.WK.forward(key)
         value = self.WV.forward(value)
-
-        query = self.qrelu.forward(query)
-        key = self.krelu.forward(key)
-        value = self.vrelu.forward(value)
 
         query = torch.cat(torch.split(query, self.d // self.H, dim=2), dim=0)
         key = torch.cat(torch.split(key, self.d // self.H, dim=2), dim=0)
         value = torch.cat(torch.split(value, self.d // self.H, dim=2), dim=0)
 
         mat1, mat2 = q_mask.unsqueeze(1).transpose(1, 2), k_mask.unsqueeze(1)
+
         attn_mask = torch.bmm(mat1, mat2).bool()
         attn_mask = torch.tile(attn_mask, (self.H, 1, 1))
+        attn_mask = torch.tril(attn_mask, diagonal=-1) if causal else attn_mask  # Causality constraint
+
         add_mask = torch.where(attn_mask, 0.0, -(2**32) + 1.0)
 
         out = torch.baddbmm(add_mask, query, key.transpose(1, 2))
         out = out / (self.d / self.H) ** 0.5
         out = self.softmax.forward(out)
 
-        weight_mask = torch.tile(q_mask, (self.H, 1)).unsqueeze(2)
-        out = out * weight_mask
+        out = out * attn_mask
         out = self.dropout.forward(out)
 
         out = torch.bmm(out, value)
@@ -159,11 +227,11 @@ class MultiHeadAttention(nn.Module):
         return out
 
 
-# ---------- Attention blocks ---------- #
+# ---------- Encoder / Decoder ---------- #
 
 
 # Profile-level self-attention block
-class SelfAttentionBlock(nn.Module):
+class SelfAttentionBlock(Encoder):
     def __init__(self, d: int, H: int, p: float, residual: bool):
         super().__init__()
 
@@ -190,10 +258,10 @@ class SelfAttentionBlock(nn.Module):
 
     def forward(self, x: Tensor, mask: Tensor) -> Tensor:
         q = self.norm1.forward(x)
-        s = self.attn.forward(q, x, x, q_mask=mask, k_mask=mask)
+        s = self.attn.forward(q, x, x, q_mask=mask, k_mask=mask, causal=True)
 
         if self.residual:
-            s = torch.mul(s, q)  # Multiplicative residual connection
+            s = torch.add(s, q)  # Residual connection
 
         s = self.norm2.forward(s)
         f = s.transpose(1, 2).contiguous()  # Change dim order to get channel dim to middle
@@ -207,13 +275,13 @@ class SelfAttentionBlock(nn.Module):
         f = f.transpose(1, 2).contiguous()  # Change dim order back
 
         if self.residual:
-            f = torch.add(f, s)  # Additive residual connection
+            f = torch.add(f, s)  # Residual connection
 
         return f
 
 
 # Target-level cross-attention block
-class CrossAttentionBlock(nn.Module):
+class CrossAttentionBlock(Decoder):
     def __init__(self, d: int, H: int, p: float, residual: bool):
         super().__init__()
 
@@ -229,11 +297,11 @@ class CrossAttentionBlock(nn.Module):
         nn.init.normal_(self.ffn.weight, std=0.01)
         nn.init.zeros_(self.ffn.bias)
 
-    def forward(self, e: Tensor, e_mask: Tensor, f: Tensor, f_mask: Tensor) -> Tensor:
-        s = self.attn.forward(e, f, f, q_mask=e_mask, k_mask=f_mask)
+    def forward(self, o: Tensor, o_mask: Tensor, p: Tensor, p_mask: Tensor) -> Tensor:
+        s = self.attn.forward(o, p, p, q_mask=o_mask, k_mask=p_mask, causal=False)
 
         if self.residual:
-            s = torch.mul(s, e)  # Multiplicative residual connection
+            s = torch.add(s, o)  # Residual connection
 
         y = self.ffn.forward(s)
         y = y.squeeze()  # Squeeze output ([batch_size, seq_size, 1] -> [batch_size, seq_size])
@@ -242,27 +310,43 @@ class CrossAttentionBlock(nn.Module):
         return y
 
 
+class DotProduct(Decoder):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.sig = nn.Sigmoid()
+
+    def forward(self, o: Tensor, o_mask: Tensor, p: Tensor, p_mask: Tensor) -> Tensor:
+        if self.training:
+            y = torch.sum(p * o, dim=-1)  # Dot-product between profile items and target items
+        else:
+            y = torch.sum(p[:, -1:, :] * o, dim=-1)  # Dot-product between last profile item and target items
+
+        y = self.sig.forward(y)
+        return y
+
+
 # ---------- CARCA ---------- #
 
 
 class CARCA(Model):
-    def __init__(self, d: int, H: int, p: float, B: int, res_sa: bool, res_ca: bool, emb: Embedding):
+    def __init__(self, d: int, p: float, emb: Embedding, enc: Iterable[Encoder], dec: Decoder):
         super().__init__()
 
         self.embeds = emb
         self.dropout = nn.Dropout(p=p)
-        self.sa_blocks = nn.ModuleList([SelfAttentionBlock(d, H, p, res_sa) for _ in range(B)])
+        self.encoder = enc
         self.norm = nn.LayerNorm(normalized_shape=d)
-        self.ca_blocks = CrossAttentionBlock(d, H, p, res_ca)
+        self.decoder = dec
 
     def forward(self, profile: Tuple[Tensor, Tensor, Tensor], targets: List[Tuple[Tensor, Tensor, Tensor]]) -> Tensor:
         p_x, p_a, p_c = profile
         p_mask = get_mask(p_x)
 
-        p_e = self.embeds.forward(p_x, p_a, p_c)
+        p_e = self.embeds.forward(p_x, p_a, p_c, False)
         p_e = self.dropout.forward(p_e)
 
-        for block in self.sa_blocks:
+        for block in self.encoder:
             p_e = block.forward(p_e, p_mask)
 
         p_e = self.norm.forward(p_e)
@@ -270,9 +354,9 @@ class CARCA(Model):
 
         for o_x, o_a, o_c in targets:
             o_mask = get_mask(o_x)
-            o_e = self.embeds.forward(o_x, o_a, o_c)
+            o_e = self.embeds.forward(o_x, o_a, o_c, True)
 
-            y_pred = self.ca_blocks.forward(o_e, o_mask, p_e, p_mask)
+            y_pred = self.decoder.forward(o_e, o_mask, p_e, p_mask)
             y_preds.append(y_pred)
 
         return torch.cat(y_preds, dim=-1)
