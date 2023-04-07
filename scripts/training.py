@@ -42,7 +42,7 @@ parser.add_argument("--g_dim", type=int, default=250)
 parser.add_argument("--residual_sa", type=bool, default=True)
 parser.add_argument("--residual_ca", type=bool, default=True)
 parser.add_argument("--epochs", type=int, default=500)
-parser.add_argument("--early_stop", type=int, default=30)
+parser.add_argument("--early_stop", type=int, default=20)
 parser.add_argument("--batch_size", type=int, default=256)
 parser.add_argument("--beta1", type=float, default=0.9)
 parser.add_argument("--beta2", type=float, default=0.98)
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     with open(f"../results/{args.out_dir}/args.json", "w") as file:
         file.write(json.dumps(vars(args)))
 
-    attrs = load_attrs("video_games_onehot_5core.dat")
+    attrs = load_attrs("video_games_sbert_5core.dat")
     ctx = load_ctx("video_games_ctx_5core.dat")
     user_ids, item_ids, profiles = load_profiles("video_games_sorted_5core.txt")
 

@@ -210,7 +210,7 @@ class MultiHeadAttention(nn.Module):
 
         attn_mask = torch.bmm(mat1, mat2).bool()
         attn_mask = torch.tile(attn_mask, (self.H, 1, 1))
-        attn_mask = torch.tril(attn_mask, diagonal=-1) if causal else attn_mask  # Causality constraint
+        attn_mask = torch.tril(attn_mask, diagonal=0) if causal else attn_mask  # Causality constraint
 
         add_mask = torch.where(attn_mask, 0.0, -(2**32) + 1.0)
 
