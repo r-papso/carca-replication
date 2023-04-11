@@ -23,22 +23,27 @@ from src.carca import (
     LearnableEncoding,
     PositionalEncoding,
     SelfAttentionBlock,
+    WeightedDotProduct,
 )
-from src.data import CARCADataset, load_attrs, load_ctx, load_profiles
+from src.data import CARCADataset, load_attrs, load_ctx, load_profiles, set_datapath
 from src.train import train
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--out_dir", type=str, default="output")
+parser.add_argument("--data_dir", type=str)
+parser.add_argument("--profile_file", type=str, default="profiles.txt")
+parser.add_argument("--attr_file", type=str, default="attrs.dat")
+parser.add_argument("--ctx_file", type=str, default="ctx.dat")
+parser.add_argument("--out_dir", type=str)
 
 parser.add_argument("--lr", type=float, default=0.001)
 parser.add_argument("--seq_len", type=int, default=50)
-parser.add_argument("--n_blocks", type=int, default=2)
-parser.add_argument("--n_heads", type=int, default=1)
+parser.add_argument("--n_blocks", type=int, default=3)
+parser.add_argument("--n_heads", type=int, default=2)
 parser.add_argument("--dropout", type=float, default=0.5)
 parser.add_argument("--l2_reg", type=float, default=0.00001)
-parser.add_argument("--d_dim", type=int, default=50)
-parser.add_argument("--g_dim", type=int, default=250)
+parser.add_argument("--d_dim", type=int, default=64)
+parser.add_argument("--g_dim", type=int, default=256)
 parser.add_argument("--residual_sa", type=bool, default=True)
 parser.add_argument("--residual_ca", type=bool, default=True)
 parser.add_argument("--epochs", type=int, default=500)
@@ -46,13 +51,14 @@ parser.add_argument("--early_stop", type=int, default=20)
 parser.add_argument("--batch_size", type=int, default=256)
 parser.add_argument("--beta1", type=float, default=0.9)
 parser.add_argument("--beta2", type=float, default=0.98)
+parser.add_argument("--gamma", type=float, default=0.9)
+parser.add_argument("--l2_norm", type=bool, default=False)
 parser.add_argument("--device", type=str, default="cuda")
+parser.add_argument("--test", type=bool, default=True)
 
 parser.add_argument("--encoding", type=str, default="identity")
 parser.add_argument("--embedding", type=str, default="id")
 parser.add_argument("--decoder", type=str, default="dot")
-
-parser.add_argument("--test", type=bool, default=True)
 
 
 def get_encoding(args) -> Encoding:
@@ -84,6 +90,8 @@ def get_decoder(args) -> Decoder:
         return CrossAttentionBlock(args.d_dim, args.n_heads, args.dropout, args.residual_ca)
     elif args.decoder.lower() == "dot":
         return DotProduct()
+    elif args.decoder.lower() == "wdot":
+        return WeightedDotProduct(args.gamma, args.seq_len, args.l2_norm, args.device)
     else:
         raise ValueError(f"Unknown decoder type: {args.decoder}")
 
@@ -91,13 +99,15 @@ def get_decoder(args) -> Decoder:
 if __name__ == "__main__":
     args = parser.parse_args()
 
+    set_datapath(args.data_dir)
+
     os.makedirs(f"../results/{args.out_dir}", exist_ok=True)
     with open(f"../results/{args.out_dir}/args.json", "w") as file:
         file.write(json.dumps(vars(args)))
 
-    attrs = load_attrs("video_games_sbert_5core.dat")
-    ctx = load_ctx("video_games_ctx_5core.dat")
-    user_ids, item_ids, profiles = load_profiles("video_games_sorted_5core.txt")
+    attrs = load_attrs(args.attr_file)
+    ctx = load_ctx(args.ctx_file)
+    user_ids, item_ids, profiles = load_profiles(args.profile_file)
 
     n_items = attrs.shape[0]
     n_ctx = next(iter(ctx.values())).shape[0]

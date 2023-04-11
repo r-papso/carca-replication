@@ -326,6 +326,36 @@ class DotProduct(Decoder):
         return y
 
 
+class WeightedDotProduct(Decoder):
+    def __init__(self, gamma: float, seq_len: int, normalize: bool, device: str):
+        super().__init__()
+
+        self.norm = normalize
+        self.W = gamma ** torch.arange(0, seq_len, device=device).unsqueeze(0).repeat(seq_len, 1)
+        self.W = self.W.tril().unsqueeze(-1)
+        self.sig = nn.Sigmoid()
+
+    def forward(self, o: Tensor, o_mask: Tensor, p: Tensor, p_mask: Tensor) -> Tensor:
+        pw = p.unsqueeze(2).repeat(1, 1, p.size(1), 1)
+        p = torch.sum(pw * self.W, dim=2)
+
+        if self.norm:
+            p = torch.nn.functional.normalize(p, dim=2)
+            o = torch.nn.functional.normalize(o, dim=2)
+
+        if self.training:
+            y = torch.sum(p * o, dim=-1)  # Dot-product between profile items and target items
+        else:
+            y = torch.sum(p[:, -1:, :] * o, dim=-1)  # Dot-product between last profile item and target items
+
+        if self.norm:
+            y = (y + 1.0) / 2.0
+        else:
+            y = self.sig.forward(y)
+
+        return y
+
+
 # ---------- CARCA ---------- #
 
 

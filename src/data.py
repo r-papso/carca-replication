@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from torch.utils.data import Dataset
 
-DATA_PATH = "../data"
+DATA_PATH = "../../data"
 
 
 def set_datapath(path: str) -> None:
