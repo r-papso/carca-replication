@@ -4,8 +4,6 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
-import torch
-from torch import Tensor
 from torch.utils.data import Dataset
 
 DATA_PATH = "../data"
@@ -52,36 +50,26 @@ def load_profiles(profile_file: str):
     return list(user_ids), list(item_ids), profiles
 
 
-def pad_profile(profile: List[int], max_len: int, mode: str) -> List[int]:
+def pad_profile(profile: List[int], max_len: int, mode: str, test: bool) -> List[int]:
     if mode not in ["train", "val", "test"]:
         raise ValueError(f"Invalid mode: {mode}")
 
     start, end = 0, 0
 
-    if len(profile) <= 3:
-        if mode == "train" and len(profile) == 2:
-            start, end = 0, 2
+    if mode == "train" and len(profile) > 1:
+        n_excluded = 2 if test else 1
+        start = max(0, len(profile) - n_excluded - max_len - 1)
+        end = max(1, len(profile) - n_excluded)
 
-        if mode == "val" and len(profile) == 3:
-            start, end = 0, 2
+    if mode == "val" and len(profile) > 2:
+        n_excluded = 1 if test else 0
+        start = max(0, len(profile) - n_excluded - max_len - 1)
+        end = max(2, len(profile) - n_excluded)
 
-        if mode == "test" and len(profile) == 3:
-            start, end = 0, 3
-    else:
-        if mode == "train":
-            n_excluded = 2
-            start = max(0, len(profile) - n_excluded - max_len - 1)
-            end = max(1, len(profile) - n_excluded)
-
-        if mode == "val":
-            n_excluded = 1
-            start = max(0, len(profile) - n_excluded - max_len - 1)
-            end = max(1, len(profile) - n_excluded)
-
-        if mode == "test":
-            n_excluded = 0
-            start = max(0, len(profile) - n_excluded - max_len - 1)
-            end = max(1, len(profile) - n_excluded)
+    if mode == "test" and len(profile) > 3:
+        n_excluded = 0
+        start = max(0, len(profile) - n_excluded - max_len - 1)
+        end = max(3, len(profile) - n_excluded)
 
     return list(range(start, end))
 
@@ -105,6 +93,7 @@ def get_train_sequences(
     seq_len: int,
     attrs: np.ndarray,
     ctx: Dict[Tuple[int, int], np.ndarray],
+    test: bool,
 ) -> Tuple[np.ndarray, ...]:
     a_len, c_len = attrs.shape[1], next(iter(ctx.values())).shape[0]
 
@@ -117,7 +106,7 @@ def get_train_sequences(
     p_c = np.zeros((seq_len, c_len), dtype=np.float32)
     o_c = np.zeros((seq_len * 2, c_len), dtype=np.float32)
 
-    padded_idxs = pad_profile(profile, seq_len, "train")
+    padded_idxs = pad_profile(profile, seq_len, "train", test)
     neg_sample = sample_negatives(profile, attrs.shape[0], len(padded_idxs))
 
     for i, pi in enumerate(reversed(padded_idxs[:-1])):
@@ -156,6 +145,7 @@ def get_test_sequences(
     attrs: np.ndarray,
     ctx: Dict[Tuple[int, int], np.ndarray],
     mode: str,
+    test: bool,
 ) -> Tuple[np.ndarray, ...]:
     a_len, c_len = attrs.shape[1], next(iter(ctx.values())).shape[0]
 
@@ -168,7 +158,7 @@ def get_test_sequences(
     p_c = np.zeros((profile_seq_len, c_len), dtype=np.float32)
     o_c = np.zeros((target_seq_len + 1, c_len), dtype=np.float32)
 
-    padded_idxs = pad_profile(profile, profile_seq_len, mode)
+    padded_idxs = pad_profile(profile, profile_seq_len, mode, test)
     neg_samples = sample_negatives(profile, attrs.shape[0], target_seq_len)
 
     one_out = padded_idxs[-1]
@@ -210,11 +200,12 @@ def get_sequences(
     attrs: np.ndarray,
     ctx: Dict[Tuple[int, int], np.ndarray],
     mode: str,
+    test: bool,
 ) -> Tuple[np.ndarray, ...]:
     if mode == "train":
-        return get_train_sequences(user_id, profile, profile_seq_len, attrs, ctx)
+        return get_train_sequences(user_id, profile, profile_seq_len, attrs, ctx, test)
     else:
-        return get_test_sequences(user_id, profile, profile_seq_len, target_seq_len, attrs, ctx, mode)
+        return get_test_sequences(user_id, profile, profile_seq_len, target_seq_len, attrs, ctx, mode, test)
 
 
 class CARCADataset(Dataset):
@@ -228,10 +219,11 @@ class CARCADataset(Dataset):
         profile_seq_len: int,
         target_seq_len: int,
         mode: str,
+        test: bool,
     ):
         super().__init__()
 
-        self.user_ids = self.valid_user_ids(profiles, profile_seq_len, mode)
+        self.user_ids = self.valid_user_ids(profiles, profile_seq_len, mode, test)
         self.item_ids = item_ids
         self.profiles = profiles
         self.attrs = attrs
@@ -239,6 +231,7 @@ class CARCADataset(Dataset):
         self.profile_seq_len = profile_seq_len
         self.target_seq_len = target_seq_len
         self.mode = mode
+        self.test = test
 
     def __len__(self) -> int:
         return len(self.user_ids)
@@ -248,8 +241,8 @@ class CARCADataset(Dataset):
         profile = self.profiles[user_id]
 
         return get_sequences(
-            user_id, profile, self.profile_seq_len, self.target_seq_len, self.attrs, self.ctx, self.mode
+            user_id, profile, self.profile_seq_len, self.target_seq_len, self.attrs, self.ctx, self.mode, self.test
         )
 
-    def valid_user_ids(self, profiles: Dict[int, List[int]], seq_len: int, mode: str) -> List[int]:
-        return [uid for uid, profile in profiles.items() if len(pad_profile(profile, seq_len, mode)) > 0]
+    def valid_user_ids(self, profiles: Dict[int, List[int]], seq_len: int, mode: str, test: bool) -> List[int]:
+        return [uid for uid, profile in profiles.items() if len(pad_profile(profile, seq_len, mode, test)) > 0]

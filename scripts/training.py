@@ -52,6 +52,8 @@ parser.add_argument("--encoding", type=str, default="identity")
 parser.add_argument("--embedding", type=str, default="id")
 parser.add_argument("--decoder", type=str, default="dot")
 
+parser.add_argument("--test", type=bool, default=True)
+
 
 def get_encoding(args) -> Encoding:
     if args.encoding.lower() == "identity":
@@ -110,6 +112,7 @@ if __name__ == "__main__":
         profile_seq_len=args.seq_len,
         target_seq_len=100,
         mode="train",
+        test=args.test,
     )
     val_data = CARCADataset(
         user_ids=user_ids,
@@ -120,6 +123,7 @@ if __name__ == "__main__":
         profile_seq_len=args.seq_len,
         target_seq_len=100,
         mode="val",
+        test=args.test,
     )
     test_data = CARCADataset(
         user_ids=user_ids,
@@ -130,6 +134,7 @@ if __name__ == "__main__":
         profile_seq_len=args.seq_len,
         target_seq_len=100,
         mode="test",
+        test=args.test,
     )
 
     val_idx = random.sample(range(len(val_data)), 10_000) if len(val_data) > 10_000 else range(len(val_data))
@@ -161,6 +166,5 @@ if __name__ == "__main__":
         optim=optim,
         epochs=args.epochs,
         early_stop=args.early_stop,
-        datadir=f"../results/{args.out_dir}"
-        # scheduler=scheduler
+        datadir=f"../results/{args.out_dir}",
     )
