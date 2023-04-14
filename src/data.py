@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from torch.utils.data import Dataset
 
-DATA_PATH = "../data"
+DATA_PATH = "../../data"
 
 
 def set_datapath(path: str) -> None:
@@ -219,7 +219,7 @@ class CARCADataset(Dataset):
         profile_seq_len: int,
         target_seq_len: int,
         mode: str,
-        test: bool,
+        test: bool = True,
     ):
         super().__init__()
 

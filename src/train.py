@@ -116,7 +116,7 @@ def train(
 
         # Save model if HR has increased
         if HR > best:
-            fs = [f for f in os.listdir(datadir) if os.path.isfile(os.path.join(datadir, f)) and f.endswith(".pth")]
+            fs = [f for f in os.listdir(datadir) if f.endswith(".pth")]
             _ = [os.remove(os.path.join(datadir, f)) for f in fs]
 
             best = HR
@@ -137,6 +137,9 @@ def train(
             break
 
         logfile.flush()
+
+    path = next(os.path.join(datadir, f) for f in os.listdir(datadir) if f.endswith(".pth"))
+    model = torch.load(path)
 
     # Print test results to stdout and logfile
     if test_loader is not None:
