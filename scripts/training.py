@@ -31,9 +31,9 @@ from src.train import train
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--data_dir", type=str)
-parser.add_argument("--profile_file", type=str, default="profiles.txt")
-parser.add_argument("--attr_file", type=str, default="attrs.dat")
-parser.add_argument("--ctx_file", type=str, default="ctx.dat")
+parser.add_argument("--profile_file", type=str)
+parser.add_argument("--attr_file", type=str)
+parser.add_argument("--ctx_file", type=str)
 parser.add_argument("--out_dir", type=str)
 
 parser.add_argument("--lr", type=float, default=0.001)

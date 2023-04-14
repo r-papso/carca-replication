@@ -219,7 +219,7 @@ class CARCADataset(Dataset):
         profile_seq_len: int,
         target_seq_len: int,
         mode: str,
-        test: bool,
+        test: bool = True,
     ):
         super().__init__()
 

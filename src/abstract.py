@@ -19,7 +19,7 @@ class Embedding(nn.Module, ABC):
         super().__init__()
 
     @abstractmethod
-    def forward(self, x: Tensor, a: Tensor, c: Tensor, target: bool) -> Tensor:
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, mask: Tensor, target: bool) -> Tensor:
         pass
 
 
