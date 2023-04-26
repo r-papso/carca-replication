@@ -21,6 +21,7 @@ from src.carca import (
     IdEmbedding,
     IdentityEncoding,
     LearnableEncoding,
+    MLPIdEmbedding,
     PositionalEncoding,
     SelfAttentionBlock,
     WeightedDotProduct,
@@ -55,6 +56,7 @@ parser.add_argument("--gamma", type=float, default=0.9)
 parser.add_argument("--l2_norm", type=bool, default=False)
 parser.add_argument("--device", type=str, default="cuda")
 parser.add_argument("--test", type=bool, default=True)
+parser.add_argument("--n_workers", type=int, default=2)
 
 parser.add_argument("--encoding", type=str, default="identity")
 parser.add_argument("--embedding", type=str, default="id")
@@ -81,6 +83,8 @@ def get_embedding(args, n_items: int, n_ctx: int, n_attrs: int, enc: Encoding) -
         return AttrCtxEmbedding(args.d_dim, args.g_dim, n_ctx, n_attrs, enc)
     elif args.embedding.lower() == "all":
         return AllEmbedding(n_items, args.d_dim, args.g_dim, n_ctx, n_attrs, enc)
+    elif args.embedding.lower() == "mlpid":
+        return MLPIdEmbedding(n_items, args.d_dim, args.g_dim, enc)
     else:
         raise ValueError(f"Unknown embedding type: {args.embedding}")
 
@@ -152,7 +156,9 @@ if __name__ == "__main__":
     test_idx = random.sample(range(len(test_data)), 10_000) if len(test_data) > 10_000 else range(len(test_data))
     test_sub = Subset(test_data, test_idx)
 
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    train_loader = DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers, pin_memory=True
+    )
     val_loader = DataLoader(val_sub, batch_size=args.batch_size, shuffle=False, num_workers=0)
     test_loader = DataLoader(test_sub, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
