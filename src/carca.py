@@ -171,6 +171,33 @@ class IdEmbedding(Embedding):
         return e
 
 
+class MLPIdEmbedding(Embedding):
+    def __init__(self, n_items: int, d: int, g: int, pos: Encoding):
+        super().__init__()
+
+        self.d = d
+        self.pos = pos
+        self.items_embed = nn.Embedding(num_embeddings=n_items, embedding_dim=g, padding_idx=0)
+        self.feats_embed = nn.Linear(in_features=g, out_features=d)
+
+        nn.init.xavier_uniform_(self.items_embed.weight)
+        nn.init.xavier_uniform_(self.feats_embed.weight)
+
+        nn.init.zeros_(self.feats_embed.bias)
+        self.items_embed._fill_padding_idx_with_zero()
+
+    def forward(self, x: Tensor, a: Tensor, c: Tensor, mask: Tensor, target: bool) -> Tensor:
+        e = self.items_embed.forward(x)
+        e = e * (self.d**0.5)  # Scale embedding output
+        e = self.feats_embed.forward(e)
+
+        if not target:
+            e = self.pos.forward(e)  # Positional encoding
+
+        e = e * mask.unsqueeze(2)
+        return e
+
+
 # ---------- Attention ---------- #
 
 
@@ -224,7 +251,7 @@ class MultiHeadAttention(nn.Module):
         add_mask = torch.where(attn_mask, 0.0, -(2**32) + 1.0)
 
         weights = torch.baddbmm(add_mask, query, key.transpose(1, 2))
-        weights = weights / (self.d / self.H) ** 0.5
+        weights = weights / ((self.d / self.H) ** 0.5)
         weights = self.softmax.forward(weights)
         weights = weights * attn_mask
 
