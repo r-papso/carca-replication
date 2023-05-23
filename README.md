@@ -1,4 +1,4 @@
-# CARCA
+# CARCA: Context and Attribute-Aware Next-Item Recommendation via Cross-Attention
 
 Replication of a state-of-the-art sequential recommendation method presented on RecSys2022. CARCA [1] is a context and attribute aware sequential model utilizing attention mechanism and Transformer [2] architecture to capture complex non-linear relations between all items in the sequence and candidate items to be recommended.
 
