@@ -150,11 +150,11 @@ class AttrEmbedding(Embedding):
 
 
 class IdEmbedding(Embedding):
-    def __init__(self, n_items: int, d: int, pos: Encoding):
+    def __init__(self, n_items: int, d: int, enc: Encoding):
         super().__init__()
 
         self.d = d
-        self.pos = pos
+        self.enc = enc
         self.items_embed = nn.Embedding(num_embeddings=n_items, embedding_dim=d, padding_idx=0)
 
         nn.init.xavier_uniform_(self.items_embed.weight)
@@ -165,18 +165,18 @@ class IdEmbedding(Embedding):
         e = e * (self.d**0.5)  # Scale embedding output
 
         if not target:
-            e = self.pos.forward(e)  # Positional encoding
+            e = self.enc.forward(e)  # Positional encoding
 
         e = e * mask.unsqueeze(2)
         return e
 
 
 class MLPIdEmbedding(Embedding):
-    def __init__(self, n_items: int, d: int, g: int, pos: Encoding):
+    def __init__(self, n_items: int, d: int, g: int, enc: Encoding):
         super().__init__()
 
         self.d = d
-        self.pos = pos
+        self.enc = enc
         self.items_embed = nn.Embedding(num_embeddings=n_items, embedding_dim=g, padding_idx=0)
         self.feats_embed = nn.Linear(in_features=g, out_features=d)
 
@@ -192,7 +192,7 @@ class MLPIdEmbedding(Embedding):
         e = self.feats_embed.forward(e)
 
         if not target:
-            e = self.pos.forward(e)  # Positional encoding
+            e = self.enc.forward(e)  # Positional encoding
 
         e = e * mask.unsqueeze(2)
         return e
