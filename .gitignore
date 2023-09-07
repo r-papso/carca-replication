@@ -132,6 +132,4 @@ dmypy.json
 data/*
 analysis/*
 results/*
-notebooks/test_input.ipynb
-notebooks/test_mha.ipynb
-notebooks/test.ipynb
+notebooks/*
