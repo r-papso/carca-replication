@@ -114,12 +114,12 @@ def train(
         HR, NDCG, loss = evaluate(model, val_loader, device, top_k)
         model = model.train().to(device)
 
-        # Save model if HR has increased
-        if HR > best:
+        # Save model if NDCG has increased
+        if NDCG > best:
             fs = [f for f in os.listdir(datadir) if f.endswith(".pth")]
             _ = [os.remove(os.path.join(datadir, f)) for f in fs]
 
-            best = HR
+            best = NDCG
             no_improve = 0
             torch.save(model, os.path.join(datadir, f"{epoch:03d}_{HR:.4f}_{NDCG:.4f}.pth"))
         else:
