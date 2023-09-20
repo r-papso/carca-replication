@@ -13,22 +13,7 @@ pytorch==1.13.0
 ## Citation
 In case of using the code or a part of the code, feel free to cite the paper [Complementary Product Recommendation for Long-tail Products](https://dl.acm.org/doi/10.1145/3604915.3608864).
 
-@inproceedings{10.1145/3604915.3608864,
-author = {Papso, Rastislav},
-title = {Complementary Product Recommendation for Long-Tail Products},
-year = {2023},
-isbn = {9798400702419},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-url = {https://doi.org/10.1145/3604915.3608864},
-doi = {10.1145/3604915.3608864},
-booktitle = {Proceedings of the 17th ACM Conference on Recommender Systems},
-pages = {1305–1311},
-numpages = {7},
-keywords = {Personalization, Product embedding, Complementary Product Recommendation, E-commerce},
-location = {Singapore, Singapore},
-series = {RecSys '23}
-}
+Rastislav Papso. 2023. Complementary Product Recommendation for Long-tail Products. In Proceedings of the 17th ACM Conference on Recommender Systems (RecSys '23). Association for Computing Machinery, New York, NY, USA, 1305–1311. https://doi.org/10.1145/3604915.3608864
 
 ## References
 
