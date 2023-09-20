@@ -15,31 +15,18 @@ In case of using the code or a part of the code, feel free to cite the paper [Co
 
 @inproceedings{10.1145/3604915.3608864,
 author = {Papso, Rastislav},
-
 title = {Complementary Product Recommendation for Long-Tail Products},
-
 year = {2023},
-
 isbn = {9798400702419},
-
 publisher = {Association for Computing Machinery},
-
 address = {New York, NY, USA},
-
 url = {https://doi.org/10.1145/3604915.3608864},
-
 doi = {10.1145/3604915.3608864},
-
 booktitle = {Proceedings of the 17th ACM Conference on Recommender Systems},
-
 pages = {1305–1311},
-
 numpages = {7},
-
 keywords = {Personalization, Product embedding, Complementary Product Recommendation, E-commerce},
-
 location = {Singapore, Singapore},
-
 series = {RecSys '23}
 }
 
