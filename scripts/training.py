@@ -42,7 +42,7 @@ parser.add_argument("--seq_len", type=int, default=50)
 parser.add_argument("--n_blocks", type=int, default=3)
 parser.add_argument("--n_heads", type=int, default=2)
 parser.add_argument("--dropout", type=float, default=0.5)
-parser.add_argument("--l2_reg", type=float, default=0.00001)
+parser.add_argument("--l2_reg", type=float, default=0.0)
 parser.add_argument("--d_dim", type=int, default=64)
 parser.add_argument("--g_dim", type=int, default=256)
 parser.add_argument("--residual_sa", type=bool, default=True)
@@ -59,7 +59,7 @@ parser.add_argument("--test", type=bool, default=True)
 parser.add_argument("--n_workers", type=int, default=2)
 
 parser.add_argument("--encoding", type=str, default="identity")
-parser.add_argument("--embedding", type=str, default="id")
+parser.add_argument("--embedding", type=str, default="all")
 parser.add_argument("--decoder", type=str, default="dot")
 
 
